@@ -1,0 +1,71 @@
+# ===== 隐私/敏感信息 =====
+.env
+.env.*
+*.secret
+*_token
+*_api_key
+.hf_token
+.wandb_api_key
+
+# ===== 本地环境/系统文件 =====
+CUsersadmin/
+.conda/
+miniconda3/
+
+# ===== 第三方仓库（开源项目，不需要重复上传）=====
+openvla/
+
+# ===== 仿真输出图片（大量PNG文件）=====
+so101_sim_output/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+
+# ===== 虚拟环境 =====
+.venv/
+venv/
+env/
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== 操作系统 =====
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ===== 数据/缓存/日志 =====
+data/
+cache/
+wandb/
+rollouts/
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.ckpt
+
+# ===== 训练输出 =====
+outputs/
+runs/
+lightning_logs/
+
+# ===== Jupyter =====
+.ipynb_checkpoints/
+
+# ===== SSH/密钥 =====
+id_rsa
+id_rsa.pub
+id_ed25519_github
+id_ed25519_github.pub
