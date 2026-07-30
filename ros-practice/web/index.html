@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ROS2 机器人实战 - 仿真视频展示</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: #0f1923;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        header {
+            background: linear-gradient(135deg, #1a2a3a 0%, #2d4a6a 100%);
+            padding: 30px 0;
+            text-align: center;
+            border-bottom: 2px solid #00aaff;
+        }
+        header h1 {
+            font-size: 28px;
+            color: #00ccff;
+            margin-bottom: 8px;
+        }
+        header p { color: #8899aa; font-size: 14px; }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
+
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+        }
+
+        .video-card {
+            background: #1a2835;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #2a3a4a;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .video-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 30px rgba(0,170,255,0.15);
+            border-color: #00aaff;
+        }
+
+        .video-card video {
+            width: 100%;
+            display: block;
+            background: #000;
+            aspect-ratio: 16/9;
+        }
+
+        .video-card .info {
+            padding: 15px 18px;
+        }
+        .video-card h3 {
+            color: #00ccff;
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+        .video-card p {
+            color: #8899aa;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .video-card .tags {
+            margin-top: 10px;
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .tag {
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 12px;
+            background: #1e3a5f;
+            color: #66bbff;
+        }
+
+        .upload-section {
+            background: #1a2835;
+            border: 2px dashed #2a4a6a;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: border-color 0.2s;
+        }
+        .upload-section:hover { border-color: #00aaff; }
+        .upload-section.dragover {
+            border-color: #00ccff;
+            background: #1e3a5f;
+        }
+        .upload-section h2 {
+            color: #00ccff;
+            margin-bottom: 10px;
+        }
+        .upload-section p { color: #667788; }
+        .upload-btn {
+            display: inline-block;
+            margin-top: 15px;
+            padding: 10px 30px;
+            background: #0066aa;
+            color: #fff;
+            border-radius: 6px;
+            cursor: pointer;
+            border: none;
+            font-size: 14px;
+        }
+        .upload-btn:hover { background: #0088cc; }
+
+        .stats {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+        .stat-item {
+            text-align: center;
+            background: #1a2835;
+            padding: 15px 30px;
+            border-radius: 10px;
+            border: 1px solid #2a3a4a;
+        }
+        .stat-item .num {
+            font-size: 32px;
+            font-weight: bold;
+            color: #00ccff;
+        }
+        .stat-item .label {
+            font-size: 12px;
+            color: #667788;
+        }
+
+        .tutorial-link {
+            display: inline-block;
+            margin-top: 8px;
+            color: #0099cc;
+            font-size: 12px;
+            text-decoration: none;
+        }
+        .tutorial-link:hover { text-decoration: underline; }
+
+        .no-videos {
+            text-align: center;
+            padding: 60px;
+            color: #556677;
+        }
+        .no-videos .icon { font-size: 48px; margin-bottom: 15px; }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #445566;
+            font-size: 12px;
+            border-top: 1px solid #1a2835;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>ROS2 机器人实战 · 仿真视频展示</h1>
+        <p>基于 myfirst_robot 项目的 SLAM 建图与 Nav2 导航实战记录</p>
+    </header>
+
+    <div class="container">
+        <div class="stats">
+            <div class="stat-item">
+                <div class="num" id="videoCount">0</div>
+                <div class="label">视频数量</div>
+            </div>
+            <div class="stat-item">
+                <div class="num">7</div>
+                <div class="label">实战教程</div>
+            </div>
+            <div class="stat-item">
+                <div class="num">100</div>
+                <div class="label">课程章节</div>
+            </div>
+        </div>
+
+        <div class="upload-section" id="uploadZone">
+            <h2>上传视频</h2>
+            <p>拖拽 MP4 视频文件到此处，或点击选择文件</p>
+            <input type="file" id="fileInput" accept="video/mp4" multiple style="display:none">
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">选择视频</button>
+        </div>
+
+        <div class="video-grid" id="videoGrid">
+            <!-- 视频卡片由 JavaScript 动态生成 -->
+        </div>
+
+        <div class="no-videos" id="noVideos">
+            <div class="icon">📹</div>
+            <p>暂无视频，请先运行录制脚本或上传视频文件</p>
+            <p style="margin-top:10px;font-size:13px">
+                运行 <code style="color:#00ccff">./scripts/record_video.sh 60 demo</code> 录制仿真视频
+            </p>
+        </div>
+    </div>
+
+    <footer>
+        <p>ROS2 实战案例 · 基于 <a href="https://gitee.com/idlity/myfirst_robot" style="color:#0099cc">idlity/myfirst_robot</a> 项目</p>
+    </footer>
+
+    <script>
+        // 预设的示例视频列表（用户录制后会出现在 assets/videos 目录）
+        const presetVideos = [
+            {
+                title: 'SLAM 建图全过程',
+                desc: '使用 slam_toolbox 在仓库环境中进行激光SLAM建图，键盘遥控控制机器人探索全场景',
+                tags: ['SLAM', 'slam_toolbox', '建图'],
+                tutorial: 'tutorials/05-SLAM建图实战.md',
+                // src 会被动态设置
+            },
+            {
+                title: 'Nav2 自主导航',
+                desc: 'Nav2 导航栈自主规划路径并避障，从起点导航到目标点',
+                tags: ['Nav2', 'DWB', '导航'],
+                tutorial: 'tutorials/06-Nav2导航实战.md',
+            },
+            {
+                title: 'Gazebo 仿真环境',
+                desc: '差速驱动机器人在 Gazebo Harmonic 仿真环境中运行，含激光雷达可视化',
+                tags: ['Gazebo', '仿真', 'LiDAR'],
+                tutorial: 'tutorials/03-Gazebo仿真环境.md',
+            }
+        ];
+
+        const videoGrid = document.getElementById('videoGrid');
+        const noVideos = document.getElementById('noVideos');
+        const videoCount = document.getElementById('videoCount');
+
+        // 渲染视频卡片
+        function renderVideos(videos) {
+            videoGrid.innerHTML = '';
+            if (videos.length === 0) {
+                noVideos.style.display = 'block';
+                videoGrid.style.display = 'none';
+            } else {
+                noVideos.style.display = 'none';
+                videoGrid.style.display = 'grid';
+                videos.forEach((v, i) => {
+                    const card = document.createElement('div');
+                    card.className = 'video-card';
+                    const tagsHTML = v.tags.map(t => `<span class="tag">${t}</span>`).join('');
+                    const tutorialHTML = v.tutorial
+                        ? `<a class="tutorial-link" href="${v.tutorial}">📖 查看教程</a>`
+                        : '';
+                    card.innerHTML = `
+                        <video controls preload="metadata" poster="${v.thumb || ''}">
+                            <source src="${v.src}" type="video/mp4">
+                            您的浏览器不支持视频播放。
+                        </video>
+                        <div class="info">
+                            <h3>${v.title}</h3>
+                            <p>${v.desc}</p>
+                            <div class="tags">${tagsHTML}</div>
+                            ${tutorialHTML}
+                        </div>
+                    `;
+                    videoGrid.appendChild(card);
+                });
+            }
+            videoCount.textContent = videos.length;
+        }
+
+        // 尝试加载 assets/videos 目录中的视频
+        async function loadVideos() {
+            const videos = [];
+            // 检查预设视频文件是否存在
+            for (const preset of presetVideos) {
+                const filename = preset.title.replace(/\s+/g, '_').toLowerCase();
+                const videoPath = `assets/videos/${filename}.mp4`;
+                const thumbPath = `assets/videos/${filename}_thumb.png`;
+
+                try {
+                    const resp = await fetch(videoPath, { method: 'HEAD' });
+                    if (resp.ok) {
+                        videos.push({
+                            ...preset,
+                            src: videoPath,
+                            thumb: thumbPath
+                        });
+                    }
+                } catch (e) {
+                    // 文件不存在，跳过
+                }
+            }
+            return videos;
+        }
+
+        // 初始化
+        loadVideos().then(videos => {
+            renderVideos(videos);
+        });
+
+        // 拖拽上传
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        // 处理上传的视频文件（本地预览）
+        function handleFiles(files) {
+            const currentVideos = Array.from(document.querySelectorAll('.video-card')).map(c => ({
+                title: c.querySelector('h3').textContent,
+                desc: c.querySelector('p').textContent,
+                tags: Array.from(c.querySelectorAll('.tag')).map(t => t.textContent),
+                src: c.querySelector('video source').src,
+            }));
+
+            Array.from(files).forEach(file => {
+                if (file.type === 'video/mp4') {
+                    const url = URL.createObjectURL(file);
+                    currentVideos.push({
+                        title: file.name.replace('.mp4', ''),
+                        desc: `上传时间: ${new Date().toLocaleString()} · 文件大小: ${(file.size/1024/1024).toFixed(1)} MB`,
+                        tags: ['上传', '本地'],
+                        src: url,
+                        thumb: ''
+                    });
+                }
+            });
+
+            renderVideos(currentVideos);
+        }
+    </script>
+</body>
+</html>

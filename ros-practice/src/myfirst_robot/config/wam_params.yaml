@@ -1,0 +1,27 @@
+# WAM 参数配置
+wam_node:
+  ros__parameters:
+    # 模型
+    model_path: "~/wam_model.pt"
+
+    # 预测
+    horizon: 20                    # 预测步数 (2秒 @ 10Hz)
+    prediction_rate: 10.0         # 预测循环频率
+
+    # 安全过滤
+    use_safety_filter: true       # 是否拦截cmd_vel进行安全过滤
+    collision_threshold: 0.3     # 碰撞概率阈值
+
+    # LiDAR
+    scan_dim: 360                  # 降采样后的LiDAR点数
+
+    # 规划器 (CEM)
+    planner:
+      num_samples: 500             # 每轮采样数
+      elite_ratio: 0.1            # 精英比例
+      iterations: 5               # CEM迭代次数
+      max_linear: 0.7             # 最大线速度 m/s
+      max_angular: 1.0            # 最大角速度 rad/s
+
+    # 可视化
+    viz_horizon: 20               # 可视化预测步数

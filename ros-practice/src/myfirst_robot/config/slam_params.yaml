@@ -1,0 +1,37 @@
+# slam_toolbox 参数配置
+# 文件路径: config/slam_params.yaml
+
+slam_toolbox:
+  ros__parameters:
+    solver_plugin: solver_plugins::CeresSolver
+    mode: mapping
+
+    # 地图分辨率与范围
+    resolution: 0.05
+    max_laser_range: 20.0
+
+    map_file_name: ''
+    map_start_at_dock: true
+
+    # 扫描匹配
+    minimum_time_interval: 0.5
+    transform_publish_period: 0.02
+    map_update_interval: 1.0
+
+    # 优化参数
+    ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
+    ceres_preconditioner: SCHUR_JACOBI
+    ceres_problem_type: SPARSE_NORMAL_CHOLESKY
+    ceres_dogleg_type: TRUST_REGION
+
+    # 回环检测
+    loop_search_maximum_distance: 3.0
+    loop_match_minimum_chain_size: 3
+    loop_match_maximum_variance: 0.08
+    loop_match_minimum_response: 0.7
+
+    # 传感器参数
+    scan_buffer_size: 3000
+    scan_buffer_maximum_scan_distance: 20.0
+    link_match_minimum_response_fine: 0.5
+    link_scan_maximum_search_distance: 3.0
