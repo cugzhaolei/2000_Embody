@@ -1,0 +1,13 @@
+{
+  "name": "lesson2_turtlesim",
+  "distro": "auto",
+  "pre": ["clean"],
+  "modules": [
+    { "name": "turtlesim", "params": { "node_name": "turtlesim", "keyboard": true, "extra_names": ["turtle2"], "monitor": true } },
+    { "name": "topic_view", "params": { "topics": ["/turtle1/pose"], "hz": true } }
+  ],
+  "watch": 8,
+  "assert_nodes": ["/turtlesim"],
+  "assert_topics": ["/turtle1/pose"],
+  "teardown": true
+}

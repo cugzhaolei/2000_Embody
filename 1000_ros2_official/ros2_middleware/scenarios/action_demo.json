@@ -1,0 +1,12 @@
+{
+  "name": "action_demo",
+  "distro": "auto",
+  "pre": ["clean"],
+  "modules": [
+    { "name": "action_demo", "params": { "lang": "py", "order": 10 } }
+  ],
+  "watch": 15,
+  "assert_nodes": ["/fibonacci_action_server"],
+  "assert_topics": [],
+  "teardown": true
+}

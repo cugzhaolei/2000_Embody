@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ROS2 教程一键执行</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0e17;color:#e0e0e0;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+header{padding:14px 28px;border-bottom:1px solid #1e293b;background:linear-gradient(135deg,#0f172a,#1e1b4b);display:flex;align-items:center;gap:14px}
+header h1{font-size:18px;font-weight:600;color:#f1f5f9}
+header .sub{font-size:12px;color:#94a3b8}
+.main{display:flex;flex:1;overflow:hidden}
+.left{width:320px;min-width:320px;border-right:1px solid #1e293b;overflow-y:auto;padding:14px;background:#0f172a}
+.stitle{font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:1.5px;padding:6px;margin-bottom:6px}
+.card{border:1px solid #1e293b;border-radius:10px;padding:14px 16px;margin-bottom:10px;background:#111827;transition:all .15s}
+.card:hover{border-color:#334155;background:#1e293b}
+.card.running{border-color:#2563eb;background:#172554}
+.card.success{border-color:#16a34a;background:#052e16}
+.card.fail{border-color:#dc2626;background:#450a0a}
+.card .top{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.card .name{font-size:14px;font-weight:600;color:#f1f5f9;flex:1}
+.card .desc{font-size:12px;color:#94a3b8}
+.card .badge{font-size:10px;padding:2px 8px;border-radius:9999px;font-weight:600;color:#94a3b8;background:#334155}
+.card .badge.running{background:#2563eb;color:#fff;animation:pulse 1s infinite}
+.card .badge.success{background:#16a34a;color:#fff}
+.card .badge.fail{background:#dc2626;color:#fff}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+.btns{display:flex;gap:8px;margin-top:10px}
+.btn{padding:7px 16px;border-radius:6px;border:none;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
+.btn-run{background:#2563eb;color:#fff}.btn-run:hover{background:#1d4ed8}
+.btn-run:disabled{opacity:.3;cursor:not-allowed}
+.btn-stop{background:#dc2626;color:#fff}.btn-stop:hover{background:#b91c1c}
+.btn-stop:disabled{opacity:.3;cursor:not-allowed}
+.right{flex:1;display:flex;flex-direction:column;background:#000}
+.th{padding:8px 16px;background:#111827;border-bottom:1px solid #1e293b;display:flex;align-items:center;justify-content:space-between}
+.th .title{font-size:13px;color:#94a3b8}
+.btn-clr{padding:4px 10px;border-radius:4px;border:1px solid #334155;background:transparent;color:#94a3b8;font-size:11px;cursor:pointer}
+.btn-clr:hover{background:#1e293b;color:#e2e8f0}
+.term{flex:1;overflow-y:auto;padding:14px 16px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:13px;line-height:1.6;background:#0c0c0c;color:#d4d4d4;white-space:pre-wrap;word-break:break-all}
+.term .dim{color:#6b7280}.term .pass{color:#4ade80;font-weight:700}.term .fail{color:#f87171;font-weight:700}
+.term .info{color:#60a5fa}.term .head{color:#c084fc;font-weight:700}.term .ok{color:#34d399;font-weight:700}
+.term .warn{color:#fbbf24}.term .err{color:#f87171}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🤖 ROS2 教程一键执行</h1>
+  <span class="sub">鱼香ROS · Foxy · 点击按钮直接运行</span>
+</header>
+<div class="main">
+  <div class="left">
+    <div class="stitle">教程场景</div>
+    <div id="cards"></div>
+  </div>
+  <div class="right">
+    <div class="th">
+      <span class="title" id="tt">终端输出</span>
+      <button class="btn-clr" onclick="clr()">清空</button>
+    </div>
+    <div class="term" id="T"><span class="dim">选择左侧教程，点击「运行」即可执行，输出实时显示在这里。</span></div>
+  </div>
+</div>
+<script>
+var running=null;
+function clr(){document.getElementById('T').innerHTML=''}
+function cls(t){
+  if(/整体结果:\s*PASS/.test(t))return'pass';
+  if(/整体结果:\s*FAIL/.test(t))return'fail';
+  if(/已清理|已停止|已启动/.test(t))return'info';
+  if(/断言|场景/.test(t))return'info';
+  if(/话题.*正常|服务.*已就绪|action.*已注册|参数节点|停录完成/.test(t))return'ok';
+  if(/正在运行|命令:/.test(t))return'warn';
+  if(/❌|FAIL|异常/.test(t))return'err';
+  if(/=====/.test(t))return'head';
+  if(/^\s*•/.test(t))return'info';
+  if(/\[INFO\]/.test(t))return'dim';
+  return''
+}
+function app(t){
+  var d=document.getElementById('T');
+  var s=document.createElement('span');
+  s.className=cls(t);
+  s.textContent=t+'\n';
+  d.appendChild(s);
+  d.scrollTop=d.scrollHeight;
+}
+function setStatus(id,st){
+  var c=document.getElementById('c-'+id);if(!c)return;
+  c.className='card '+st;
+  var b=c.querySelector('.badge');
+  var labels={idle:'就绪',running:'运行中…',success:'PASS ✅',fail:'FAIL ❌'};
+  var cls2={idle:'',running:'running',success:'success',fail:'fail'};
+  b.textContent=labels[st]||st;
+  b.className='badge '+(cls2[st]||'');
+  c.querySelector('.btn-run').disabled=(st==='running');
+  c.querySelector('.btn-stop').disabled=(st!=='running');
+}
+function run(id,file,name){
+  if(running)return;
+  running=id;setStatus(id,'running');
+  clr();
+  document.getElementById('tt').textContent=name;
+  app('🚀 正在运行: '+name);
+  app('   场景文件: '+file);
+  app('---');
+  var es=new EventSource('/api/run?file='+encodeURIComponent(file));
+  es.onmessage=function(e){
+    var d=JSON.parse(e.data);
+    if(d.type==='output')app(d.line);
+    if(d.type==='done'){
+      es.close();running=null;
+      setStatus(id,d.rc===0?'success':'fail');
+      app('');
+      app(d.rc===0?'✅ 执行完毕':'❌ 执行失败 rc='+d.rc);
+    }
+  };
+  es.onerror=function(){es.close();running=null;setStatus(id,'fail');app('❌ 连接断开')};
+}
+function stop(){
+  if(!running)return;
+  fetch('/api/stop');
+}
+fetch('/api/scenarios').then(function(r){return r.json()}).then(function(list){
+  var c=document.getElementById('cards');
+  list.forEach(function(s){
+    var d=document.createElement('div');
+    d.className='card';d.id='c-'+s.id;
+    d.innerHTML='<div class="top"><span class="name">'+s.name+'</span><span class="badge">就绪</span></div>'
+      +'<div class="desc">'+s.desc+'</div>'
+      +'<div class="btns">'
+      +'<button class="btn btn-run" onclick="run(\''+s.id+"','"+s.file+"','"+s.name+"')\">▶ 运行</button>"
+      +'<button class="btn btn-stop" onclick="stop()" disabled>⏹ 停止</button>'
+      +'</div>';
+    c.appendChild(d);
+  });
+});
+</script>
+</body>
+</html>

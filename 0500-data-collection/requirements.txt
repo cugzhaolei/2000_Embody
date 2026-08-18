@@ -1,0 +1,29 @@
+# ===== 0500-data-collection 核心依赖 =====
+# 采集框架最小编译
+numpy>=1.24
+
+# 图像处理（可视化 / GIF / 视频编码）
+Pillow>=10.0
+
+# 可选: 结构化元数据存储（LeRobot 格式元数据）
+pandas>=2.0
+
+# 可选: parquet 后端
+pyarrow>=14.0
+
+# ===== 仿真数据源 =====
+# mujoco>=3.0        # MuJoCo 仿真
+# pybullet>=3.2.6    # PyBullet 仿真
+
+# ===== 视频编码（videos/ 输出） =====
+# imageio>=2.31
+# imageio-ffmpeg>=0.4.9
+
+# ===== 遥操作可视化窗口 =====
+# pygame>=2.5
+
+# ===== ROS2 真机 (需在 ROS2 环境中) =====
+# rclpy>=0.0.0
+
+# ===== LeRobot 格式审计 =====
+# huggingface_hub>=0.20

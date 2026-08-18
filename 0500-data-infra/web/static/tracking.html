@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>训练评估血缘追踪</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+<nav class="nav">
+  <div class="logo">Embodied Data Infra<small>具身数据基础设施平台</small></div>
+  <a href="index.html">总览</a>
+  <a href="ego.html">Ego 长视频处理</a>
+  <a class="active" href="tracking.html">训练评估血缘</a>
+  <a href="flywheel.html">数据飞轮</a>
+  <span class="spacer"></span>
+  <a class="ghost" href="http://127.0.0.1:8000/docs" target="_blank">API 文档</a>
+</nav>
+
+<main class="container">
+  <header class="page-head">
+    <div>
+      <h1 class="page-title">训练与评估平台关联管理</h1>
+      <p class="page-sub">Dataset ↔ 训练任务 ↔ 模型版本 ↔ Benchmark ↔ 实机结果 ↔ 失败 Case 全链路可追溯（JD 职责 9）</p>
+    </div>
+    <div class="page-meta">
+      <span class="badge"><span class="dot accent"></span>全链路追溯</span>
+      <span class="badge"><span class="dot warn"></span>失败 Case 驱动飞轮</span>
+    </div>
+  </header>
+
+  <div class="card">
+    <h3>选择模型查看血缘</h3>
+    <div class="row">
+      <select id="model-select" style="min-width:260px"></select>
+      <button onclick="loadLineage()">追溯血缘</button>
+      <button class="ghost" onclick="loadTables()">刷新全量数据</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <div class="card mt-16">
+    <h3>血缘链路</h3>
+    <div class="row" id="lineage-chain"></div>
+    <div class="mt-16" id="lineage-detail"></div>
+  </div>
+
+  <section class="grid cols-2 mt-16">
+    <div class="card">
+      <h3>Benchmark 评测</h3>
+      <div id="benchmarks-table"></div>
+    </div>
+    <div class="card">
+      <h3>实机评估</h3>
+      <div id="evals-table"></div>
+    </div>
+  </section>
+
+  <section class="card mt-16">
+    <h3>失败 Case 列表</h3>
+    <div id="failures-table"></div>
+  </section>
+
+  <section class="card mt-16">
+    <h3>登记失败 Case（数据飞轮输入）</h3>
+    <div class="row">
+      <label class="fld">任务<select id="case-task"><option>pick_cup</option><option>insert_peg</option><option>stack_blocks</option><option>pour_water</option></select></label>
+      <label class="fld">模型<select id="case-model"></select></label>
+      <label class="fld">失败类型<input id="case-type" value="grasp_loss"></label>
+      <label class="fld">优先级<select id="case-priority"><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
+      <label class="fld" style="min-width:200px">描述<input id="case-desc" value=""></label>
+      <button class="green" onclick="createFailure()">登记</button>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <b>Embodied Data Infra</b> · 训练评估关联管理演示
+</footer>
+
+<script src="js/common.js"></script>
+<script>
+let allModels = [];
+
+async function init() {
+  allModels = await apiGet('/api/tracking/models');
+  const sel = $id('model-select');
+  sel.replaceChildren(...allModels.map(m =>
+    el('option', { value: m.model_id, html: `${m.model_id} (${m.version})` })));
+  $id('case-model').replaceChildren(...allModels.map(m =>
+    el('option', { value: m.model_id, html: m.model_id })));
+
+  if (allModels.length) { await loadLineage(); }
+  await loadTables();
+}
+
+async function loadLineage() {
+  const modelId = $id('model-select').value;
+  if (!modelId) { $id('msg').innerHTML = '<div class="loading">暂无模型</div>'; return; }
+  $id('msg').innerHTML = '<div class="loading">加载血缘…</div>';
+  try {
+    const d = await apiGet('/api/tracking/lineage/' + encodeURIComponent(modelId));
+    renderLineage(d);
+    renderBenchmarks(d.benchmarks);
+    renderEvals(d.real_world_evals);
+    renderFailures(d.failure_cases);
+    $id('msg').innerHTML = '';
+  } catch (e) {
+    $id('msg').innerHTML = `<div class="error-box">${e.message}</div>`;
+  }
+}
+
+function renderLineage(d) {
+  const chain = $id('lineage-chain');
+  const job = d.training_job || {};
+  const nodes = [
+    ['dataset', d.dataset_version || '—', '数据集', '#4f8cff'],
+    ['job', d.training_job ? d.training_job.job_id : '—', '训练任务', '#c08cff'],
+    ['model', d.model ? d.model.model_id : '—', '模型版本', '#63e6a1'],
+    ['eval', `×${d.real_world_evals.length}`, '实机评估', '#e3b341'],
+    ['case', `×${d.failure_cases.length}`, '失败 Case', '#f4665f'],
+  ];
+  const items = [];
+  nodes.forEach((n, i) => {
+    items.push(el('div', { class: 'lineage-node' }, [
+      el('div', { class: 'node-tag', html: n[0] }),
+      el('div', { class: 'node-value', style: `color:${n[3]}`, html: n[1] }),
+      el('div', { class: 'node-sub', html: n[2] }),
+    ]));
+    if (i < nodes.length - 1) {
+      items.push(el('div', { class: 'lineage-arrow', html: '→' }));
+    }
+  });
+  chain.replaceChildren(...items);
+
+  const detail = $id('lineage-detail');
+  if (!job.job_id) { detail.replaceChildren(el('div', { class: 'empty', html: '模型未关联训练任务（无法追溯）' })); return; }
+  detail.replaceChildren(
+    el('div', { class: 'grid cols-4' }, [
+      statCard('训练状态', statusTag(job.status), '', ''),
+      statCard('训练成功率', job.success_rate != null ? (job.success_rate * 100).toFixed(1) + '%' : '—', 'green'),
+      statCard('模型产物', d.model ? d.model.artifact_path || '—' : '—', ''),
+      statCard('Benchmark 分数', d.benchmarks[0] ? d.benchmarks[0].overall_score : '—', 'accent'),
+    ]));
+}
+
+function renderBenchmarks(benches) {
+  $id('benchmarks-table').replaceChildren(benches.length ? table(
+    [{ title: 'Benchmark' }, { title: '数据集' }, { title: '得分' }, { title: '时间' }],
+    benches,
+    b => [
+      el('td', { class: 'mono', html: b.benchmark_id }),
+      el('td', { class: 'mono', html: b.dataset_version || '—' }),
+      el('td', { html: b.overall_score }),
+      el('td', { html: fmtTime(b.created_at) }),
+    ]) : el('div', { class: 'empty', html: '无 Benchmark 记录' }));
+}
+
+function renderEvals(evals) {
+  $id('evals-table').replaceChildren(evals.length ? table(
+    [{ title: '任务' }, { title: '尝试/成功' }, { title: '成功率' }, { title: '环境' }, { title: '时间' }],
+    evals,
+    e => [
+      el('td', { html: e.task_name }),
+      el('td', { html: `${e.success_count} / ${e.num_trials}` }),
+      el('td', { html: `<span class="tag ${e.success_rate >= 0.7 ? 'green' : e.success_rate >= 0.4 ? 'warn' : 'danger'}">${(e.success_rate * 100).toFixed(0)}%</span>` }),
+      el('td', { html: e.environment || '—' }),
+      el('td', { html: fmtTime(e.created_at) }),
+    ]) : el('div', { class: 'empty', html: '无实机评估记录' }));
+}
+
+function renderFailures(cases) {
+  $id('failures-table').replaceChildren(cases.length ? table(
+    [{ title: 'Case' }, { title: '任务' }, { title: '类型' }, { title: '优先级' },
+     { title: '状态' }, { title: '回流版本' }, { title: '时间' }],
+    cases,
+    c => [
+      el('td', { class: 'mono', html: c.case_id }),
+      el('td', { html: c.task_name }),
+      el('td', { html: c.failure_type }),
+      el('td', { html: '★'.repeat(c.priority) }),
+      el('td', { html: statusTag(c.status) }),
+      el('td', { class: 'mono', html: c.retrain_version || '—' }),
+      el('td', { html: fmtTime(c.created_at) }),
+    ]) : el('div', { class: 'empty', html: '无失败 Case' }));
+}
+
+async function loadTables() {
+  try {
+    const [benchmarks, evals, failures] = await Promise.all([
+      apiGet('/api/tracking/benchmarks'),
+      apiGet('/api/tracking/evals'),
+      apiGet('/api/tracking/failures'),
+    ]);
+    renderBenchmarks(benchmarks);
+    renderEvals(evals);
+    renderFailures(failures);
+  } catch (e) { console.error(e); }
+}
+
+async function createFailure() {
+  try {
+    const body = {
+      task_name: $id('case-task').value,
+      model_id: $id('case-model').value,
+      failure_type: $id('case-type').value,
+      priority: +$id('case-priority').value,
+      description: $id('case-desc').value,
+    };
+    const c = await apiPost('/api/tracking/failures', body);
+    alert(`失败 Case 已登记: ${c.case_id}`);
+    await loadTables();
+  } catch (e) { alert('登记失败: ' + e.message); }
+}
+
+init().catch(e => {
+  document.querySelector('.container').append(
+    el('div', { class: 'error-box', html: '加载失败: ' + e.message }));
+});
+</script>
+</body>
+</html>

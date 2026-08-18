@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ego 长视频处理</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+<nav class="nav">
+  <div class="logo">Embodied Data Infra<small>具身数据基础设施平台</small></div>
+  <a href="index.html">总览</a>
+  <a class="active" href="ego.html">Ego 长视频处理</a>
+  <a href="tracking.html">训练评估血缘</a>
+  <a href="flywheel.html">数据飞轮</a>
+  <span class="spacer"></span>
+  <a class="ghost" href="http://127.0.0.1:8000/docs" target="_blank">API 文档</a>
+</nav>
+
+<main class="container">
+  <header class="page-head">
+    <div>
+      <h1 class="page-title">Ego 长视频 / 人类操作数据处理</h1>
+      <p class="page-sub">有效操作片段切分 · 动作阶段识别 · 异常过滤 · 训练样本生成（JD 职责 8）</p>
+    </div>
+    <div class="page-meta">
+      <span class="badge"><span class="dot accent"></span>四段流水线</span>
+      <span class="badge"><span class="dot ok"></span>规则引擎 · 零人工标注</span>
+    </div>
+  </header>
+
+  <div class="card">
+    <h3>运行演示流水线</h3>
+    <div class="steps">
+      <span class="step"><span class="idx">1</span>片段切分</span>
+      <span class="step"><span class="idx">2</span>阶段识别</span>
+      <span class="step"><span class="idx">3</span>异常过滤</span>
+      <span class="step"><span class="idx">4</span>样本生成</span>
+    </div>
+    <div class="row">
+      <label class="fld">视频时长(s)<input id="duration" type="number" value="120" min="30" max="600"></label>
+      <label class="fld">帧率<select id="fps"><option>30</option><option>60</option><option>15</option></select></label>
+      <label class="fld">操作窗口<select id="scenario">
+        <option value="two">两段操作（40-75s, 85-120s）</option>
+        <option value="three">三段操作（20-45s, 55-70s, 85-110s）</option>
+      </select></label>
+      <button class="green" onclick="runDemo()">运行处理流水线</button>
+      <button class="ghost" onclick="runAnnotationDemo('good')">自动标注演示</button>
+    </div>
+    <div id="msg"></div>
+  </div>
+
+  <section id="ego-stats" class="grid cols-4 mt-24"></section>
+
+  <section class="card mt-16">
+    <h3>运动量曲线与有效片段（着色区为切分结果）</h3>
+    <div id="chart-motion" class="chart"></div>
+  </section>
+
+  <section class="grid cols-2 mt-16">
+    <div class="card">
+      <h3>动作阶段占比</h3>
+      <div id="chart-phases" class="chart"></div>
+      <div class="legend" id="phase-legend"></div>
+    </div>
+    <div class="card">
+      <h3>阶段时间线</h3>
+      <div id="phase-timeline"></div>
+      <div class="mt-16">
+        <h3>片段切分结果</h3>
+        <div id="segments-table"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card mt-16">
+    <h3>异常过滤与样本生成</h3>
+    <div class="grid cols-2">
+      <div id="filter-panel"></div>
+      <div id="annotation-panel"></div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <b>Embodied Data Infra</b> · Ego 长视频后处理流水线演示
+</footer>
+
+<script src="js/common.js"></script>
+<script>
+let lastResult = null;
+
+function scenarioWindows() {
+  const v = $id('scenario').value;
+  if (v === 'three') return [{ start: 20, end: 45, amplitude: 0.08 }, { start: 55, end: 70, amplitude: 0.06 }, { start: 85, end: 110, amplitude: 0.07 }];
+  return [{ start: 40, end: 75, amplitude: 0.08 }, { start: 85, end: 120, amplitude: 0.06 }];
+}
+
+async function runDemo() {
+  const btn = event.target; btn.disabled = true;
+  $id('msg').innerHTML = '<div class="loading">运行 Ego 处理流水线…</div>';
+  try {
+    const body = {
+      duration_sec: +$id('duration').value,
+      fps: +$id('fps').value,
+      operation_windows: scenarioWindows(),
+    };
+    lastResult = await apiPost('/api/ego/demo', body);
+    $id('msg').innerHTML = '';
+    render(lastResult);
+  } catch (e) {
+    $id('msg').innerHTML = `<div class="error-box">${e.message}</div>`;
+  } finally { btn.disabled = false; }
+}
+
+function render(d) {
+  // 统计卡
+  const filterStats = d.filter_results.reduce((acc, r) => {
+    acc[r.verdict] = (acc[r.verdict] || 0) + 1; return acc;
+  }, {});
+  const totalSec = d.motion.t[d.motion.t.length - 1];
+  $id('ego-stats').replaceChildren(
+    statCard('视频帧数', d.n_frames.toLocaleString(), 'accent', `${d.fps} fps`),
+    statCard('有效片段', d.segments.length, 'green', 'segments'),
+    statCard('异常丢弃', filterStats.discard || 0, 'warn', 'filtered'),
+    statCard('训练样本', d.samples_count, 'purple', 'sliding windows'),
+  );
+
+  // 运动曲线 + 片段着色
+  const areas = d.segments.map((s, i) => [
+    { xAxis: +s.start_time.toFixed(1), itemStyle: { color: i % 2 ? 'rgba(79,140,255,.16)' : 'rgba(126,231,135,.14)' } },
+    { xAxis: +s.end_time.toFixed(1) },
+  ]);
+  initChart('chart-motion', {
+    ...ECHARTS_BASE,
+    grid: { left: 48, right: 24, top: 24, bottom: 40 },
+    tooltip: { ...ECHARTS_BASE.tooltip, trigger: 'axis' },
+    xAxis: { type: 'value', name: 's', axisLine: { lineStyle: { color: '#2d3748' } } },
+    yAxis: { type: 'value', name: 'motion', splitLine: { lineStyle: { color: '#21262d' } } },
+    series: [{
+      type: 'line', data: d.motion.v.map((v, i) => [d.motion.t[i], v]),
+      showSymbol: false, lineStyle: { color: '#4f8cff', width: 1.5 },
+      areaStyle: { color: 'rgba(79,140,255,.08)' },
+      markArea: { silent: true, data: areas },
+    }],
+  });
+
+  // 阶段占比饼图
+  initChart('chart-phases', phaseChartOption(d.phase_spans, totalSec));
+  $id('phase-legend').replaceChildren(
+    ...Object.entries(PHASE_COLORS).map(([k, c]) =>
+      el('div', { class: 'item' }, [
+        el('span', { class: 'dot', style: `background:${c}` }),
+        el('span', { html: k }),
+      ]))
+  );
+
+  // 阶段时间线
+  renderTimeline(d.phase_spans);
+
+  // 片段表
+  $id('segments-table').replaceChildren(renderSegments(d));
+
+  // 过滤面板
+  renderFilter(d);
+
+  // 标注面板
+  renderAnnotationPanel(d);
+}
+
+function renderTimeline(spans) {
+  const wrap = $id('phase-timeline');
+  if (!spans.length) { wrap.innerHTML = '<div class="empty">无阶段数据</div>'; return; }
+  const t0 = spans[0].start_time, t1 = spans[spans.length - 1].end_time;
+  const total = Math.max(1, t1 - t0);
+  const bar = el('div', { class: 'timeline' }, spans.map(s => {
+    const w = Math.max(1.5, ((s.end_time - s.start_time) / total) * 100);
+    const label = (s.end_time - s.start_time) >= total * 0.06 ? s.phase : '';
+    return el('div', {
+      class: 'seg',
+      style: `width:${w}%; background:${PHASE_COLORS[s.phase] || '#4f8cff'}`,
+      title: `${s.phase} ${s.start_time.toFixed(1)}-${s.end_time.toFixed(1)}s`,
+      html: label,
+    });
+  }));
+  wrap.replaceChildren(bar);
+}
+
+function renderSegments(d) {
+  if (!d.segments.length) return el('div', { class: 'empty', html: '未切分出有效片段' });
+  const verdictMap = Object.fromEntries(d.filter_results.map(r => [r.segment_id, r]));
+  return table(
+    [{ title: '片段' }, { title: '时间范围' }, { title: '时长(s)' }, { title: '帧数' },
+     { title: '活跃占比' }, { title: '判定' }, { title: '原因' }],
+    d.segments,
+    s => {
+      const v = verdictMap[s.segment_id];
+      return [
+        el('td', { class: 'mono', html: s.segment_id }),
+        el('td', { html: `${s.start_time.toFixed(1)}s ~ ${s.end_time.toFixed(1)}s` }),
+        el('td', { html: s.duration.toFixed(1) }),
+        el('td', { html: (s.end_idx - s.start_idx).toLocaleString() }),
+        el('td', { html: (s.active_ratio * 100).toFixed(0) + '%' }),
+        el('td', { html: v ? statusTag(v.verdict) : '—' }),
+        el('td', { html: v && v.reasons.length ? v.reasons.join('; ') : '—' }),
+      ];
+    });
+}
+
+function renderFilter(d) {
+  const panel = $id('filter-panel');
+  const discarded = d.filter_results.filter(r => r.verdict === 'discard');
+  const reasonCount = {};
+  discarded.forEach(r => r.reasons.forEach(rs => {
+    const k = rs.split(':')[0];
+    reasonCount[k] = (reasonCount[k] || 0) + 1;
+  }));
+  const head = el('h3', { html: '异常过滤结果' });
+  if (!discarded.length) {
+    panel.replaceChildren(head, el('div', { class: 'ok-box', html: `全部 ${d.filter_results.length} 个片段通过质检，无异常丢弃` }));
+    return;
+  }
+  const list = el('div', { class: 'mt-16' }, Object.entries(reasonCount).map(([k, v]) =>
+    el('div', { class: 'row' }, [el('span', { html: `${k} ×${v}` })])));
+  panel.replaceChildren(head, el('div', { class: 'warn', html: `丢弃 ${discarded.length} 个异常片段` }), list);
+}
+
+function renderAnnotationPanel(d) {
+  const panel = $id('annotation-panel');
+  const kept = d.kept_ids.length;
+  panel.replaceChildren(
+    el('h3', { html: '自动标注' }),
+    el('div', { class: 'mt-16' }, [
+      el('div', { class: 'row' }, [
+        el('span', { html: `片段自动标注: 保留 ${kept} 段 → success=true；丢弃 ${d.segments.length - kept} 段 → success=false` }),
+      ]),
+      el('div', { class: 'mt-16 row' }, [
+        el('span', { html: '轨迹标注演示:' }),
+        el('button', { class: 'ghost', onclick: () => runAnnotationDemo('good') }, '标注「好」轨迹'),
+        el('button', { class: 'ghost', onclick: () => runAnnotationDemo('bad') }, '标注「坏」轨迹'),
+      ]),
+      el('div', { id: 'annotation-result' }),
+    ]));
+}
+
+async function runAnnotationDemo(kind) {
+  const box = $id('annotation-result');
+  if (!box) {
+    $id('msg').innerHTML = '<div class="loading">请先运行一次处理流水线</div>';
+    return;
+  }
+  try {
+    const r = await apiPost('/api/annotation/label', { episode_id: 'ep_demo', demo: kind });
+    const ok = r.labels.success;
+    box.innerHTML = `<div class="${ok ? 'ok-box' : 'error-box'}">${kind === 'good' ? '好' : '坏'}轨迹标注: success=${r.labels.success} · 置信度 ${r.confidence}<br>原因: ${r.reasons.join('; ') || '无异常'}</div>`;
+  } catch (e) {
+    box.innerHTML = `<div class="error-box">${e.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>

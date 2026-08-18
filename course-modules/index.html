@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>具身智能课程体系 - Embody Course Modules</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: #0f172a; color: #e2e8f0; line-height: 1.6; }
+        .header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 2rem; text-align: center; border-bottom: 1px solid #334155; }
+        .header h1 { font-size: 2.5rem; font-weight: 700; background: linear-gradient(90deg, #38bdf8, #22d3ee); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.5rem; }
+        .header p { color: #64748b; font-size: 1.1rem; }
+        .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+        .module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; }
+        .module-card { background: #1e293b; border-radius: 1rem; padding: 1.5rem; border: 1px solid #334155; transition: all 0.3s ease; cursor: pointer; }
+        .module-card:hover { border-color: #38bdf8; box-shadow: 0 0 20px rgba(56,189,248,0.2); transform: translateY(-2px); }
+        .module-number { display: inline-block; padding: 0.5rem 1rem; background: rgba(56,189,248,0.1); color: #38bdf8; border-radius: 0.5rem; font-size: 0.875rem; font-weight: 600; margin-bottom: 1rem; }
+        .module-title { font-size: 1.1rem; font-weight: 600; color: #f1f5f9; margin-bottom: 0.5rem; }
+        .module-range { font-size: 0.875rem; color: #64748b; }
+        .footer { text-align: center; padding: 2rem; color: #64748b; border-top: 1px solid #334155; margin-top: 2rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>具身智能课程体系</h1>
+        <p>Embody Course Modules - 机器人全栈工程师培训课程</p>
+    </div>
+    
+    <div class="container">
+        <div class="module-grid">
+            <div class="module-card" onclick="openModule('模块一-机器人行业与产品分析-01至08课.html')">
+                <div class="module-number">模块一</div>
+                <div class="module-title">机器人行业与产品分析</div>
+                <div class="module-range">第 01 - 08 课</div>
+            </div>
+            <div class="module-card" onclick="openModule('模块二-机械系统结构设计-09至18课.html')">
+                <div class="module-number">模块二</div>
+                <div class="module-title">机械系统结构设计</div>
+                <div class="module-range">第 09 - 18 课</div>
+            </div>
+            <div class="module-card" onclick="openModule('模块三-电气系统与控制柜设计-19至28课.html')">
+                <div class="module-number">模块三</div>
+                <div class="module-title">电气系统与控制柜设计</div>
+                <div class="module-range">第 19 - 28 课</div>
+            </div>
+            <div class="module-card" onclick="openModule('模块四-工业通信总线体系-29至38课.html')">
+                <div class="module-number">模块四</div>
+                <div class="module-title">工业通信总线体系</div>
+                <div class="module-range">第 29 - 38 课</div>
+            </div>
+            <div class="module-card" onclick="openModule('模块五-ROS2分布式软件架构-39至50课.html')">
+                <div class="module-number">模块五</div>
+                <div class="module-title">ROS2分布式软件架构</div>
+                <div class="module-range">第 39 - 50 课</div>
+            </div>
+            <div class="module-card" onclick="openModule('模块六-多传感器感知系统-51至60课.html')">
+                <div class="module-number">模块六</div>
+                <div class="module-title">多传感器感知系统</div>
+                <div class="module-range">第 51 - 60 课</div>
+            </div>
+            <div class="module-card" onclick="openModule('模块七-导航算法SLAM与运动控制-61至72课.html')">
+                <div class="module-number">模块七</div>
+                <div class="module-title">导航算法SLAM与运动控制</div>
+                <div class="module-range">第 61 - 72 课</div>
+            </div>
+            <div class="module-card" onclick="openModule('模块八-工业级高可靠软件架构-73至80课.html')">
+                <div class="module-number">模块八</div>
+                <div class="module-title">工业级高可靠软件架构</div>
+                <div class="module-range">第 73 - 80 课</div>
+            </div>
+            <div class="module-card" onclick="openModule('模块九-具身智能模型训练与部署-81至88课.html')">
+                <div class="module-number">模块九</div>
+                <div class="module-title">具身智能模型训练与部署</div>
+                <div class="module-range">第 81 - 88 课</div>
+            </div>
+            <div class="module-card" onclick="openModule('模块十-系统集成测试与产业实践-89至100课.html')">
+                <div class="module-number">模块十</div>
+                <div class="module-title">系统集成测试与产业实践</div>
+                <div class="module-range">第 89 - 100 课</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="footer">
+        <p>© 2026 Embody Course Modules - 具身智能课程体系</p>
+    </div>
+
+    <script>
+        function openModule(fileName) {
+            window.location.href = fileName;
+        }
+    </script>
+</body>
+</html>

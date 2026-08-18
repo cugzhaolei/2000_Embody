@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ROS2 教程一键执行</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+      background: #0a0e17; color: #e0e0e0; height: 100vh;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    /* ─── header ─── */
+    header {
+      padding: 14px 28px; border-bottom: 1px solid #1e293b;
+      background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+      display: flex; align-items: center; gap: 14px;
+    }
+    header h1 { font-size: 18px; font-weight: 600; color: #f1f5f9; }
+    header .subtitle { font-size: 12px; color: #94a3b8; }
+    /* ─── main: left panels + right terminal ─── */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    /* ─── left: tutorial cards ─── */
+    .left {
+      width: 300px; min-width: 300px; border-right: 1px solid #1e293b;
+      overflow-y: auto; padding: 12px;
+      background: #0f172a;
+    }
+    .section-title {
+      font-size: 11px; font-weight: 600; color: #64748b;
+      text-transform: uppercase; letter-spacing: 1.5px;
+      padding: 8px 6px 4px; margin-top: 4px;
+    }
+    .card {
+      border: 1px solid #1e293b; border-radius: 10px;
+      padding: 14px 16px; margin-bottom: 8px;
+      cursor: pointer; transition: all .15s;
+      position: relative; overflow: hidden;
+      background: #111827;
+    }
+    .card:hover { border-color: #334155; background: #1e293b; }
+    .card.running { border-color: #2563eb; background: #172554; }
+    .card.success { border-color: #16a34a; }
+    .card.fail    { border-color: #dc2626; }
+    .card .top { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .card .icon { font-size: 22px; }
+    .card .name { font-size: 14px; font-weight: 600; color: #f1f5f9; }
+    .card .desc { font-size: 12px; color: #94a3b8; }
+    .card .badge {
+      position: absolute; top: 10px; right: 12px;
+      font-size: 10px; padding: 2px 8px; border-radius: 9999px;
+      font-weight: 600; color: #fff;
+    }
+    .badge.running { background: #2563eb; animation: pulse 1s infinite; }
+    .badge.success { background: #16a34a; }
+    .badge.fail    { background: #dc2626; }
+    .badge.idle    { background: #334155; color: #94a3b8; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+    .btn-run {
+      display: inline-flex; align-items: center; gap: 6px;
+      margin-top: 10px; padding: 6px 14px; border-radius: 6px;
+      border: 1px solid #334155; background: #1e293b;
+      color: #e2e8f0; font-size: 12px; font-weight: 500;
+      cursor: pointer; transition: all .15s;
+    }
+    .btn-run:hover { background: #2563eb; border-color: #2563eb; color: #fff; }
+    .btn-run:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ─── right: terminal ─── */
+    .right {
+      flex: 1; display: flex; flex-direction: column;
+      background: #000;
+    }
+    .term-header {
+      padding: 8px 16px; background: #111827;
+      border-bottom: 1px solid #1e293b;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .term-header .title { font-size: 13px; color: #94a3b8; }
+    .btn-clear {
+      padding: 4px 10px; border-radius: 4px; border: 1px solid #334155;
+      background: transparent; color: #94a3b8; font-size: 11px;
+      cursor: pointer;
+    }
+    .btn-clear:hover { background: #1e293b; color: #e2e8f0; }
+    .terminal {
+      flex: 1; overflow-y: auto; padding: 14px 16px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 13px; line-height: 1.55;
+      background: #0c0c0c; color: #d4d4d4;
+      white-space: pre-wrap; word-break: break-all;
+    }
+    .terminal .line           { color: #d4d4d4; }
+    .terminal .line-pass      { color: #4ade80; font-weight: 600; }
+    .terminal .line-fail      { color: #f87171; font-weight: 600; }
+    .terminal .line-info      { color: #60a5fa; }
+    .terminal .line-header    { color: #c084fc; font-weight: 600; }
+    .terminal .line-dim       { color: #6b7280; }
+    .terminal .line-launch    { color: #fbbf24; }
+    .terminal .line-result    { color: #34d399; font-weight: 600; background: #064e3b20; }
+    .terminal .line-error     { color: #f87171; }
+    /* scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🤖 ROS2 教程一键执行</h1>
+  <span class="subtitle">鱼香 ROS 官方教程 · Foxy · 点击按钮直接运行</span>
+</header>
+
+<div class="main">
+  <!-- left: cards -->
+  <div class="left">
+    <div class="section-title">教程场景</div>
+    <div id="cards"></div>
+  </div>
+
+  <!-- right: terminal -->
+  <div class="right">
+    <div class="term-header">
+      <span class="title" id="termTitle">终端输出</span>
+      <button class="btn-clear" onclick="clearTerminal()">清空</button>
+    </div>
+    <div class="terminal" id="terminal">
+<span class="line-dim">选择左侧教程，点击按钮即可运行，输出实时显示在这里。</span>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

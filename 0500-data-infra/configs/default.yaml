@@ -1,0 +1,197 @@
+# ============================================
+# 具身数据基础设施 - 默认配置
+# ============================================
+
+# 项目信息
+project:
+  name: "embodied-data-infra"
+  version: "0.1.0"
+  description: "具身数据采集、处理和管理平台"
+
+# 数据 Schema 配置
+schema:
+  time_sync:
+    method: "hardware"        # hardware | software | ptp | ntp
+    tolerance_ms: 5.0
+    drift_correction: true
+
+  sensors:
+    - name: "front_camera"
+      modality: "rgb"
+      sensor_id: "cam_front_01"
+      topic: "/camera/color/image_raw"
+      frame_id: "camera_color_optical_frame"
+      frequency_hz: 30.0
+      resolution: [640, 480]
+      dtype: "uint8"
+
+    - name: "depth_camera"
+      modality: "depth"
+      sensor_id: "depth_01"
+      topic: "/camera/depth/image_rect_raw"
+      frame_id: "camera_depth_optical_frame"
+      frequency_hz: 30.0
+      resolution: [640, 480]
+      dtype: "float32"
+
+    - name: "robot_state"
+      modality: "joint_state"
+      sensor_id: "robot_01"
+      topic: "/joint_states"
+      frequency_hz: 125.0
+      dtype: "float64"
+
+    - name: "eef_pose"
+      modality: "eef_pose"
+      sensor_id: "eef_01"
+      topic: "/tcp_ee_pose"
+      frequency_hz: 125.0
+      dtype: "float64"
+
+    - name: "tactile_sensor"
+      modality: "tactile"
+      sensor_id: "tactile_01"
+      topic: "/tactile/data"
+      frequency_hz: 100.0
+      dtype: "float32"
+
+# 数据采集配置
+collector:
+  buffer_size: 1000
+  rgb_camera:
+    width: 640
+    height: 480
+    fps: 30.0
+    codec: "mjpeg"
+  depth_camera:
+    width: 640
+    height: 480
+    fps: 30.0
+    depth_scale: 0.001
+
+# 同步管理配置
+sync:
+  tolerance_ms: 5.0
+  method: "timestamp"
+  master_sensor: "robot_01"
+
+# 后处理流水线配置
+pipeline:
+  video:
+    backend: "ffmpeg"         # ffmpeg | pyav | opencv
+    codec: "h264"
+    quality: 23               # CRF 值
+    pixel_format: "yuv420p"
+
+  trajectory:
+    target_freq: 30.0
+    smooth_window: 5
+    interpolation: "linear"
+
+  cleaning:
+    blur_threshold: 50.0
+    brightness_min: 10.0
+    brightness_max: 245.0
+    depth_invalid_ratio_max: 0.3
+    action_max_value: 10.0
+
+  episode:
+    min_length: 10
+    max_length: 10000
+    gap_threshold_sec: 0.5
+    split_method: "gap"       # time | gap | action | custom
+
+# 存储配置
+storage:
+  format: "parquet"           # parquet | hdf5
+  parquet:
+    compression: "snappy"
+  hdf5:
+    compression: "gzip"
+    compression_level: 4
+
+# 格式转换配置
+conversion:
+  lerobot:
+    robot_type: "so101"
+    fps: 30.0
+  rosbag:
+    storage_id: "mcap"
+  mcap:
+    message_encoding: "json"
+
+# 版本管理配置
+versioning:
+  store_dir: "./dataset_versions"
+  auto_snapshot: true
+
+# 质量检查配置
+quality:
+  image:
+    blur_threshold: 50.0
+    brightness_min: 10.0
+    brightness_max: 245.0
+    contrast_min: 20.0
+  trajectory:
+    max_position_jump: 0.05
+    max_velocity: 2.0
+    max_acceleration: 10.0
+  sync:
+    max_sync_error_ms: 10.0
+    max_gap_sec: 0.5
+    expected_freq: 30.0
+
+# Ego 长视频 / 人类操作数据处理配置
+ego:
+  video_segmenter:
+    motion_threshold: 0.02
+    low_motion_ratio: 0.5
+    min_active_sec: 2.0
+    min_idle_sec: 1.0
+    pad_sec: 0.3
+    default_fps: 30.0
+  action_phase:
+    static_threshold: 0.01
+    grasp_open_delta: 0.05
+    min_phase_len: 3
+  abnormal_filter:
+    blur_threshold: 50.0
+    static_ratio_max: 0.4
+    occlusion_threshold: 0.8
+    frame_sample: 10
+  sample_generator:
+    window_size: 30
+    stride: 15
+    min_window_ratio: 0.5
+
+# 自动标注配置
+annotation:
+  jump_threshold: 0.05
+  blur_threshold: 50.0
+  static_active_ratio: 0.4
+  occlusion_threshold: 0.8
+
+# 训练评估平台关联管理配置
+tracking:
+  registry_dir: "./training_registry"
+
+# 数据飞轮配置
+flywheel:
+  max_per_task: 20
+  min_priority: 2
+  require_data_ref: true
+  low_success_threshold: 0.5
+  verify_threshold: 0.7
+
+# 日志配置
+logging:
+  level: "INFO"
+  format: "[%(asctime)s] %(levelname)s %(name)s | %(message)s"
+  file: null
+
+# 路径配置
+paths:
+  data_dir: "./data"
+  output_dir: "./outputs"
+  checkpoint_dir: "./checkpoints"
+  log_dir: "./logs"

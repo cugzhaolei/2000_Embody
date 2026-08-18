@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>具身数据基础设施 · 总览</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+<nav class="nav">
+  <div class="logo">Embodied Data Infra<small>具身数据基础设施平台</small></div>
+  <a class="active" href="index.html">总览</a>
+  <a href="ego.html">Ego 长视频处理</a>
+  <a href="tracking.html">训练评估血缘</a>
+  <a href="flywheel.html">数据飞轮</a>
+  <span class="spacer"></span>
+  <a class="ghost" href="http://127.0.0.1:8000/docs" target="_blank">API 文档</a>
+</nav>
+
+<main class="container">
+  <header class="page-head">
+    <div>
+      <h1 class="page-title">平台总览</h1>
+      <p class="page-sub">Dataset 版本 · 训练任务 · 模型 · 评测 · 失败数据 · 飞轮状态</p>
+    </div>
+    <div class="page-meta">
+      <span class="badge"><span class="dot ok"></span>数据平台在线</span>
+      <span class="badge"><span class="dot accent"></span>Flywheel 闭环运行中</span>
+    </div>
+  </header>
+
+  <section id="stat-cards" class="grid cols-5"></section>
+
+  <section class="grid cols-2 mt-24">
+    <div class="card">
+      <h3>按任务实机成功率</h3>
+      <div id="chart-task-success" class="chart"></div>
+    </div>
+    <div class="card">
+      <h3>失败 Case 状态分布</h3>
+      <div id="chart-failure-status" class="chart"></div>
+    </div>
+  </section>
+
+  <section class="grid cols-2 mt-16">
+    <div class="card">
+      <h3>数据集版本演化（Episode 数）</h3>
+      <div id="chart-versions" class="chart"></div>
+    </div>
+    <div class="card">
+      <h3>最近训练任务</h3>
+      <div id="jobs-table"></div>
+    </div>
+  </section>
+
+  <section class="card mt-16">
+    <h3>最近飞轮迭代</h3>
+    <div id="flywheel-table"></div>
+  </section>
+</main>
+
+<footer class="footer">
+  <b>Embodied Data Infra</b> · 具身数据采集 / 后处理 / 版本管理 / 飞轮闭环演示平台 · API: <a class="ghost" href="http://127.0.0.1:8000/docs" target="_blank">/docs</a>
+</footer>
+
+<script src="js/common.js"></script>
+<script>
+async function load() {
+  const d = await apiGet('/api/dashboard/summary');
+  const s = d.stats;
+
+  // 统计卡片
+  const cards = [
+    statCard('数据集版本', s.versions, 'accent', 'versioned snapshots'),
+    statCard('模型版本', s.models, 'green'),
+    statCard('训练任务', s.jobs, ''),
+    statCard('实机评估', s.evals, ''),
+    statCard('失败 Case', s.failures_open, 'warn', `共 ${s.failures_total} 个`),
+  ];
+  $id('stat-cards').replaceChildren(...cards);
+
+  // 任务成功率柱状图
+  const tasks = Object.entries(d.task_success).sort((a, b) => a[1].success_rate - b[1].success_rate);
+  initChart('chart-task-success', barOption(
+    tasks.map(t => t[0]), tasks.map(t => +(t[1].success_rate * 100).toFixed(1)),
+    '#7ee787', p => `${p.name}: ${p.value}%`
+  ));
+
+  // 失败状态饼图
+  const statusData = Object.entries(d.failure_status).map(([k, v]) => ({ name: k, value: v }));
+  initChart('chart-failure-status', pieOption(statusData, ['#d29922', '#4f8cff', '#bc8cff', '#7ee787', '#3a4454']));
+
+  // 版本演化
+  const vers = [...d.versions].reverse();
+  initChart('chart-versions', barOption(
+    vers.map(v => v.version), vers.map(v => v.num_episodes), '#4f8cff',
+    p => `${p.name}: ${p.value} 个 Episode`
+  ));
+
+  // 任务表
+  $id('jobs-table').replaceChildren(rows(d.recent_jobs));
+  $id('flywheel-table').replaceChildren(fwRows(d.flywheel_history));
+}
+
+function rows(jobs) {
+  if (!jobs.length) return el('div', { class: 'empty', html: '暂无训练任务' });
+  return table(
+    [{ title: '任务 ID' }, { title: '数据集版本' }, { title: '模型' },
+     { title: '状态' }, { title: '成功率' }, { title: '完成时间' }],
+    jobs,
+    j => [
+      el('td', { class: 'mono', html: j.job_id }),
+      el('td', { class: 'mono', html: j.dataset_version || '—' }),
+      el('td', { class: 'mono', html: j.model_id || '—' }),
+      el('td', { html: statusTag(j.status) }),
+      el('td', { html: j.success_rate != null ? (j.success_rate * 100).toFixed(1) + '%' : '—' }),
+      el('td', { html: fmtTime(j.finished_at) }),
+    ]);
+}
+
+function fwRows(history) {
+  if (!history.length) return el('div', { class: 'empty', html: '暂无飞轮迭代（可前往「数据飞轮」页执行一轮）' });
+  return table(
+    [{ title: '迭代' }, { title: '回流数' }, { title: '新版本' }, { title: '训练任务' },
+     { title: '模型' }, { title: '验证关闭' }],
+    history,
+    h => [
+      el('td', { html: `#${h.iteration}` }),
+      el('td', { html: h.curated }),
+      el('td', { class: 'mono', html: h.new_version || '—' }),
+      el('td', { class: 'mono', html: h.training_job_id || '—' }),
+      el('td', { class: 'mono', html: h.model_id || '—' }),
+      el('td', { html: h.verified_cases }),
+    ]);
+}
+
+load().catch(e => {
+  document.querySelector('.container').append(
+    el('div', { class: 'error-box', html: '加载失败: ' + e.message })
+  );
+});
+</script>
+</body>
+</html>

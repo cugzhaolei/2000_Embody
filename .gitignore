@@ -18,6 +18,10 @@ openvla/
 # ===== 仿真输出图片（大量PNG文件）=====
 so101_sim_output/
 
+# ===== MuJoCo 运行日志 =====
+MUJOCO_LOG.TXT
+*.log.txt
+
 # ===== Python =====
 __pycache__/
 *.py[cod]
@@ -69,3 +73,19 @@ id_rsa
 id_rsa.pub
 id_ed25519_github
 id_ed25519_github.pub
+.bitfun/
+
+# ===== 数据/权重/虚拟环境（不入库）=====
+checkpoints/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+**/.venv/
+**/__pycache__/
+*.pyc
+*.pyd
+*.dll
+*.csv
+!**/*.csv  # 保留显式声明的 csv 配置
+test_write.txt

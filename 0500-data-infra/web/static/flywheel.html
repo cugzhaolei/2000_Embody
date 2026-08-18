@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>具身数据飞轮</title>
+<link rel="stylesheet" href="css/style.css">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body>
+<nav class="nav">
+  <div class="logo">Embodied Data Infra<small>具身数据基础设施平台</small></div>
+  <a href="index.html">总览</a>
+  <a href="ego.html">Ego 长视频处理</a>
+  <a href="tracking.html">训练评估血缘</a>
+  <a class="active" href="flywheel.html">数据飞轮</a>
+  <span class="spacer"></span>
+  <a class="ghost" href="http://127.0.0.1:8000/docs" target="_blank">API 文档</a>
+</nav>
+
+<main class="container">
+  <header class="page-head">
+    <div>
+      <h1 class="page-title">具身数据飞轮</h1>
+      <p class="page-sub">实机失败数据 / 低成功率任务 / 新增场景数据 → 自动回流 → 筛选 → 再训练 → 验证关闭（JD 职责 10）</p>
+    </div>
+    <div class="page-meta">
+      <span class="badge"><span class="dot green"></span>失败自动回流</span>
+      <span class="badge"><span class="dot accent"></span>持续迭代</span>
+    </div>
+  </header>
+
+  <div class="grid cols-4" id="fw-stats"></div>
+
+  <div class="grid cols-2 mt-24">
+    <div class="card">
+      <h3>执行一轮飞轮</h3>
+      <div class="row" style="flex-direction:column; align-items:stretch; gap:12px">
+        <label class="fld">待改进模型<select id="run-model" style="min-width:220px"></select></label>
+        <label class="fld">产出模型 ID<input id="run-output" placeholder="缺省: {model}_fw"></label>
+        <label class="fld">仅回流任务（逗号分隔，可留空）<input id="run-tasks" placeholder="pick_cup,insert_peg"></label>
+        <button class="green" onclick="runFlywheel()">执行一轮飞轮</button>
+        <div id="run-msg"></div>
+      </div>
+      <div class="mt-16" id="report-panel"></div>
+    </div>
+
+    <div class="card">
+      <h3>实机评估登记（自动回流失败）</h3>
+      <div class="row" style="flex-direction:column; align-items:stretch; gap:12px">
+        <label class="fld">模型<select id="eval-model"></select></label>
+        <label class="fld">任务<select id="eval-task"><option>pick_cup</option><option>insert_peg</option><option>stack_blocks</option><option>pour_water</option></select></label>
+        <div class="row">
+          <label class="fld" style="flex:1">尝试次数<input id="eval-trials" type="number" value="20"></label>
+          <label class="fld" style="flex:1">成功次数<input id="eval-success" type="number" value="7"></label>
+        </div>
+        <label class="fld">环境<input id="eval-env" value="demo_table"></label>
+        <button onclick="recordEval()">登记实机评估</button>
+        <div id="eval-msg"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt-24">
+    <h3>飞轮迭代历史</h3>
+    <div id="history-table"></div>
+  </div>
+</main>
+
+<footer class="footer">
+  <b>Embodied Data Infra</b> · 数据飞轮闭环演示
+</footer>
+
+<script src="js/common.js"></script>
+<script>
+async function init() {
+  const [models, state] = await Promise.all([apiGet('/api/tracking/models'), apiGet('/api/flywheel/state')]);
+  const opts = models.map(m => el('option', { value: m.model_id, html: m.model_id }));
+  $id('run-model').replaceChildren(...opts);
+  $id('eval-model').replaceChildren(...models.map(m => el('option', { value: m.model_id, html: m.model_id })));
+
+  $id('fw-stats').replaceChildren(
+    statCard('最新模型', state.latest_model || '—', 'green'),
+    statCard('开放失败 Case', state.open_cases, 'warn'),
+    statCard('低成功率任务', state.low_success_tasks.length || 0, 'danger', state.low_success_tasks.join(' / ') || '无'),
+    statCard('可回流 Episode', state.episode_count, 'accent'),
+  );
+  await loadHistory();
+}
+
+async function loadHistory() {
+  const history = await apiGet('/api/flywheel/history');
+  $id('history-table').replaceChildren(history.length ? table(
+    [{ title: '迭代' }, { title: '时间' }, { title: '回流数' }, { title: '新版本' },
+     { title: '训练任务' }, { title: '新模型' }, { title: '验证关闭' }, { title: '详情' }],
+    history,
+    h => [
+      el('td', { html: `#${h.iteration}` }),
+      el('td', { html: fmtTime(h.run_at) }),
+      el('td', { html: h.curated }),
+      el('td', { class: 'mono', html: h.new_version || '—' }),
+      el('td', { class: 'mono', html: h.training_job_id || '—' }),
+      el('td', { class: 'mono', html: h.model_id || '—' }),
+      el('td', { html: h.verified_cases }),
+      el('td', { html: h.details && h.details.low_success_tasks ? h.details.low_success_tasks.join(', ') : '—' }),
+    ]) : el('div', { class: 'empty', html: '暂无迭代，执行一轮飞轮后展示' }));
+}
+
+async function runFlywheel() {
+  const btn = event.target; btn.disabled = true;
+  $id('run-msg').innerHTML = '<div class="loading">执行飞轮：回流 → 筛选 → 新版本 → 模拟训练 → 验证…</div>';
+  try {
+    const tasks = $id('run-tasks').value.split(',').map(s => s.trim()).filter(Boolean);
+    const body = {
+      model_id: $id('run-model').value,
+      output_model_id: $id('run-output').value || undefined,
+      task_filter: tasks.length ? tasks : undefined,
+    };
+    const report = await apiPost('/api/flywheel/run', body);
+    $id('run-msg').innerHTML = '';
+    renderReport(report);
+    await loadHistory();
+    init();
+  } catch (e) {
+    $id('run-msg').innerHTML = `<div class="error-box">${e.message}</div>`;
+  } finally { btn.disabled = false; }
+}
+
+function renderReport(r) {
+  const panel = $id('report-panel');
+  const cards = el('div', { class: 'grid cols-4' }, [
+    statCard('回流失败数', r.ingested, 'warn'),
+    statCard('精选入库', r.curated, 'green'),
+    statCard('新数据集版本', r.new_version || '—', 'accent'),
+    statCard('验证关闭 Case', r.verified_cases, 'purple'),
+  ]);
+  const detail = el('div', { class: 'mt-16', html:
+    `<div class="row">
+       <span class="tag">训练任务 ${r.training_job_id || '—'}</span>
+       <span class="tag purple">模型 ${r.model_id || '—'}</span>
+       ${r.details && r.details.low_success_tasks && r.details.low_success_tasks.length
+         ? `<span class="tag warn">低成功率任务: ${r.details.low_success_tasks.join(', ')}</span>` : ''}
+     </div>
+     ${r.details && r.details.eval_result
+       ? '<div class="mt-16"><b>验证评估:</b><pre style="font-size:12px;margin-top:6px">' +
+         JSON.stringify(r.details.eval_result, null, 2) + '</pre></div>' : ''}` });
+  panel.replaceChildren(cards, detail);
+}
+
+async function recordEval() {
+  const btn = event.target; btn.disabled = true;
+  try {
+    const body = {
+      model_id: $id('eval-model').value,
+      task_name: $id('eval-task').value,
+      num_trials: +$id('eval-trials').value,
+      success_count: +$id('eval-success').value,
+      environment: $id('eval-env').value,
+    };
+    const r = await apiPost('/api/flywheel/eval', body);
+    $id('eval-msg').innerHTML =
+      `<div class="ok-box">成功率 ${(r.success_rate * 100).toFixed(0)}% · 已回流 ${r.failures_reflowed} 个失败数据（${r.eval.eval_id}）</div>`;
+    init();
+  } catch (e) {
+    $id('eval-msg').innerHTML = `<div class="error-box">${e.message}</div>`;
+  } finally { btn.disabled = false; }
+}
+
+init().catch(e => {
+  document.querySelector('.container').append(
+    el('div', { class: 'error-box', html: '加载失败: ' + e.message }));
+});
+</script>
+</body>
+</html>

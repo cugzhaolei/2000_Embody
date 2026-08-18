@@ -1,0 +1,13 @@
+{
+  "name": "bag_record_demo",
+  "distro": "auto",
+  "pre": ["clean"],
+  "modules": [
+    { "name": "pubsub",     "params": { "lang": "py", "topic": "chatter", "echo": false, "hz": false } },
+    { "name": "bag_record", "params": { "topics": ["/chatter"], "duration": 5, "outdir": "/tmp/rosagent_bag" } }
+  ],
+  "watch": 8,
+  "assert_nodes": ["/minimal_publisher"],
+  "assert_topics": ["/chatter"],
+  "teardown": true
+}

@@ -1,0 +1,12 @@
+{
+  "name": "service_demo",
+  "distro": "auto",
+  "pre": ["clean"],
+  "modules": [
+    { "name": "service_client", "params": { "lang": "py" } }
+  ],
+  "watch": 10,
+  "assert_nodes": ["/minimal_service"],
+  "assert_topics": [],
+  "teardown": true
+}

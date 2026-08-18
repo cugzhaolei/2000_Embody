@@ -1,0 +1,12 @@
+{
+  "name": "params_demo",
+  "distro": "auto",
+  "pre": ["clean"],
+  "modules": [
+    { "name": "params_demo", "params": { "lang": "py", "value": "ROSAGENT OK" } }
+  ],
+  "watch": 8,
+  "assert_nodes": ["/minimal_param_node"],
+  "assert_topics": [],
+  "teardown": true
+}
