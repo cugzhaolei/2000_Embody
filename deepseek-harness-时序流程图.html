@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek Harness 底层原理图解（时序图 + 流程图）</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/github-markdown-css/github-markdown-dark.min.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #e5e5e5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+  .header { position: sticky; top: 0; z-index: 100; background: rgba(13,17,23,0.85); backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .header-inner { max-width: 1000px; margin: 0 auto; padding: 0 24px; height: 52px; display: flex; align-items: center; justify-content: space-between; }
+  .header-left { display: flex; align-items: center; gap: 8px; }
+  .back-link { display: flex; align-items: center; gap: 4px; color: #2997ff; font-size: 14px; font-weight: 500; text-decoration: none; }
+  .back-link:hover { opacity: 0.7; }
+  .header-sep { color: #6e6e73; font-size: 16px; font-weight: 300; }
+  .header-title { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
+  .content { max-width: 1080px; margin: 0 auto; padding: 40px 24px 80px; }
+  .markdown-body { line-height: 1.75; font-size: 15px; }
+  .markdown-body h1 { font-size: 30px; margin: 24px 0 16px; }
+  .markdown-body h2 { font-size: 22px; margin: 32px 0 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+  .markdown-body blockquote { color: #a1a1a6; }
+  .markdown-body pre.mermaid { background: #0d1117; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 16px; margin: 0; display: flex; justify-content: center; overflow-x: auto; }
+  .markdown-body pre.mermaid svg { max-width: 100%; height: auto; }
+  .markdown-body code { background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+
+  /* ==== 共享导出组件样式 (mermaid-export.js) ==== */
+  .mermaid-export-allhost { display: flex; justify-content: flex-end; margin: 8px 0 24px; }
+  .export-all-btn, .mermaid-export-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(41,151,255,0.4); background: rgba(41,151,255,0.12); color: #2997ff; font-size: 13px; font-weight: 600; padding: 6px 14px; border-radius: 8px; cursor: pointer; transition: all .2s; }
+  .export-all-btn:hover, .mermaid-export-btn:hover { background: rgba(41,151,255,0.2); }
+  .export-all-btn:disabled, .mermaid-export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .mermaid-export-box { margin: 20px 0; }
+  .mermaid-export-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .mermaid-export-tag { font-size: 13px; font-weight: 700; letter-spacing: .5px; color: #a1a1a6; }
+  .footer { text-align: center; padding: 32px; color: #6e6e73; font-size: 13px; border-top: 1px solid rgba(255,255,255,0.06); }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-inner">
+      <div class="header-left">
+        <a href="/" class="back-link">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          <span>IoT-Pub</span>
+        </a>
+        <span class="header-sep">/</span>
+        <span style="color:#26d07c;font-size:14px;font-weight:600">DeepSeek Harness</span>
+      </div>
+    </div>
+  </div>
+  <div class="content">
+    <article class="markdown-body">
+<h1>DeepSeek Harness 底层原理图解（时序图 + 流程图）</h1>
+<blockquote>
+<p>基于 <code>deepseek-harness-master</code> 源码精读。所有图均为 Mermaid 语法，可直接在 GitHub / Typora / 支持 Mermaid 的编辑器渲染。
+图例：参与者即真实模块；消息即真实方法/事件名（与源码一致）。</p>
+</blockquote>
+<hr>
+<h2>图 1（时序图）：一次对话 turn 的完整旅程 —— 从输入到落盘</h2>
+<p>这是全系统最核心的一条链路：<code>ReactLoopAgent.turn()/step()</code> 驱动一轮对话。</p>
+<pre class="mermaid" id="diagram-1">
+sequenceDiagram
+    autonumber
+    participant U as 用户/UI
+    participant A as Agent&lt;br/&gt;(ReactLoopAgent)
+    participant I as Inbox&lt;br/&gt;(持久化收件箱)
+    participant S as Session Log&lt;br/&gt;(事件溯源账本)
+    participant P as SystemPrompt&lt;br/&gt;(点菜员)
+    participant L as LlmRuntime&lt;br/&gt;(ctx.llm)
+    participant AD as LlmAdapter&lt;br/&gt;(DeepSeek 等)
+    participant T as ToolRuntime&lt;br/&gt;(ctx.tools)
+    participant TB as 工具实现
+    participant PERS as Persistence&lt;br/&gt;(write-behind)
+
+    U-&gt;&gt;A: followup(message)
+    A-&gt;&gt;I: splice(&#x27;next-turn&#x27;, …, [message])
+    I-&gt;&gt;S: append(&#x27;agent/inbox/spliced&#x27;)  // 收件箱变更也入账
+    A-&gt;&gt;I: wakeDriver() → 开驱动循环
+
+    Note over A,S: —— turn()：开一轮 ——
+    A-&gt;&gt;S: append(&#x27;turn/start&#x27;, {turn})
+    A-&gt;&gt;I: claim(&#x27;next-turn&#x27;, turn)   // 取出待处理消息
+
+    Note over A,P: —— preStep()：组装提示词 ——
+    A-&gt;&gt;P: assemble({agent, signal})
+    P--&gt;&gt;A: PromptAssembly{sections, tools, variables}
+    A-&gt;&gt;S: append(&#x27;user/message&#x27;, {…}, surfaceOp:&#x27;append&#x27;)
+
+    Note over A,L: —— step()：构造并发出模型请求 ——
+    A-&gt;&gt;S: deriveMessages()   // 从账本“算出”历史
+    S--&gt;&gt;A: Message[]
+    A-&gt;&gt;L: prepareCall(config, signal)
+    L--&gt;&gt;A: PreparedLlmCall{config, retryPolicy, stream()}
+    A-&gt;&gt;S: append(&#x27;request/header&#x27;, {header, reason})
+
+    A-&gt;&gt;L: stream(request)   // 经 llm/stream waterfall
+    L-&gt;&gt;AD: adapter.stream(options)
+    loop 流式响应
+        AD--&gt;&gt;A: chunk
+        A-&gt;&gt;S: append(&#x27;assistant/chunk&#x27;, {chunk})  // 逐字入账，回放保真
+    end
+    A-&gt;&gt;S: append(&#x27;assistant/message&#x27;, {message, usage})
+
+    alt 模型请求了工具调用
+        A-&gt;&gt;T: executeToolCalls(toolCalls, turn, step, signal)
+        loop 每个 tool-call
+            T-&gt;&gt;S: append(&#x27;tool/call&#x27;, {callId, name, arguments})
+            Note over T,TB: —— 五段式执行管线 ——
+            T-&gt;&gt;T: tools/pre-execute waterfall (allow/deny/ask)
+            T-&gt;&gt;T: guard 检查（单调守卫）
+            T-&gt;&gt;T: tools/execute waterfall (timeout 包装等)
+            T-&gt;&gt;TB: execute(args, exec)   // 工具本体
+            TB--&gt;&gt;T: canonical value
+            T-&gt;&gt;T: tools/post-execute waterfall (接受/替换/block)
+            T-&gt;&gt;S: append(&#x27;tool/result&#x27;, {message, error?, meta?})
+        end
+        A-&gt;&gt;A: 工具还欠请求 → 下一 step；否则收尾
+    end
+
+    A-&gt;&gt;S: append(&#x27;turn/end&#x27;, {turn, reason})
+    Note over A,PERS: 每次模型请求前 / 工具副作用前强制冲刷
+    PERS-&gt;&gt;PERS: session/flush → write-behind 立即落盘
+</pre>
+<p><strong>关键点</strong>：
+- 编号 3、5、10、15、19、24 都是<strong>写账本</strong>——"模型可见 ⟺ 已记录"铁律的体现；
+- <code>request/header</code> 是"请求快照"（provider/model/工具列表），模型历史完全由 <code>deriveMessages()</code> 从账本折叠出来；
+- <code>assistant/chunk</code> 逐字入账，保证 UI 重放与真实输出一字不差；
+- 工具结果按模型顺序提交（结果保序、执行可重叠），取消时为未启动的调用补写合成结果。</p>
+<hr>
+<h2>图 2（时序图）：子代理委派 —— 一个 Agent 生出一个 Agent</h2>
+<p>前台一次性委派（<code>subagent</code> 工具 → <code>spawn</code> provider 的完整时序）。</p>
+<pre class="mermaid" id="diagram-2">
+sequenceDiagram
+    autonumber
+    participant P as 父 Agent
+    participant TS as subagent 工具
+    participant SR as SubagentRuntime&lt;br/&gt;(ctx.subagents)
+    participant PR as Provider (spawn)
+    participant CR as ctx.agents&lt;br/&gt;(AgentRegistry)
+    participant CA as 子 Agent&lt;br/&gt;(同一 agent-loop)
+    participant CS as 子 Session Log
+
+    P-&gt;&gt;TS: execute(args)   // 模型调用 subagent 工具
+    TS-&gt;&gt;SR: start(&#x27;spawn&#x27;, {prompt, parent, signal})
+    SR-&gt;&gt;PR: provider.start(request)
+    PR-&gt;&gt;CR: create({meta:{parentSession, delegationDepth+1}, setup})
+    CR-&gt;&gt;CS: append(&#x27;session/end-seed&#x27;)  // 全新会话，无父历史
+    CR--&gt;&gt;PR: AgentHandle
+    PR-&gt;&gt;CA: followup(prompt)
+    CA-&gt;&gt;CS: append(&#x27;turn/start&#x27; → … 正常循环 …)
+    CA--&gt;&gt;PR: whenIdle()  → 子代理跑完
+    PR--&gt;&gt;SR: SubagentResult{output, stopReason}
+    SR--&gt;&gt;TS: run.result
+    TS--&gt;&gt;P: tool/result（子代理的最终答复）
+    P-&gt;&gt;P: dispose()  // 必须释放子代理
+</pre>
+<p><strong>关键点</strong>：
+- 子代理<strong>复用同一条 agent-loop</strong>——<code>create()</code> 的 setup 钩子里装配 persona/工具过滤/结构化输出，发布时序与主 agent 完全一致；
+- <code>parentSession</code> + <code>delegationDepth</code>（父深度+1）写入 SessionHeader，形成可持久化的血缘树；<code>fork</code> provider 则用父会话已完成前缀做 seed；
+- 可续子代理（continuable）走 <code>startContinuable</code>：父用 <code>send_message</code> 续发、<code>interrupt_agent</code> 只停当前轮，冷恢复直接从持久化 Session + 折叠描述符重建，<strong>不经过 Provider</strong>。</p>
+<hr>
+<h2>图 3（流程图）：dsh 启动 —— 五层 patch 组合成插件树</h2>
+<p>从命令到运行中的 Web UI。</p>
+<pre class="mermaid" id="diagram-3">
+flowchart TD
+    CLI[&quot;dsh --profile web --port 8080&quot;] --&gt; ARGS[&quot;apps/cli/src/args.ts&lt;br/&gt;commander 切分&lt;br/&gt;launcher flag | app 参数&quot;]
+    ARGS --&gt; PB[&quot;profile-boot.ts → runProfile()&quot;]
+    PB --&gt; ENV[&quot;loadLayeredEnv&lt;br/&gt;继承环境 &gt; 项目 .env &gt; $DSH_HOME/.env&quot;]
+    ENV --&gt; COMP[&quot;composeProfile：五层 patch 叠加&quot;]
+    COMP --&gt; L1[&quot;① bundle 层&lt;br/&gt;(dsh.profile.bundles 顺序：base → web-app)&quot;]
+    COMP --&gt; L2[&quot;② profile 层&lt;br/&gt;profiles/web/cordis.patch.yml&quot;]
+    COMP --&gt; L3[&quot;③ home 层&lt;br/&gt;$DSH_HOME/cordis.patch.yml&quot;]
+    COMP --&gt; L4[&quot;④ --patch overlays&quot;]
+    COMP --&gt; L5[&quot;⑤ launcher 派生层&lt;br/&gt;agent-presets / telemetry 开关&quot;]
+    L1 &amp; L2 &amp; L3 &amp; L4 &amp; L5 --&gt; FLAT[&quot;flatten 成一次&lt;br/&gt;applyEntryPatches([], layers)&lt;br/&gt;打空根&quot;]
+    FLAT --&gt; BOOT[&quot;boot(&#x27;dsh&#x27;, cordis.yml, patches)&quot;]
+    BOOT --&gt; ROOT[&quot;new Context + provide(&#x27;dshHomePath&#x27;)&quot;]
+    ROOT --&gt; LOADER[&quot;ctx.plugin(Loader) + prepare 钩子&lt;br/&gt;provideCmdline / launch-environment&quot;]
+    LOADER --&gt; INCLUDE[&quot;mountRootInclude&lt;br/&gt;cordis:include 根 entry (id=&#x27;include&#x27;)&quot;]
+    INCLUDE --&gt; AWAIT[&quot;loader.await() → assertEntriesActivated&quot;]
+    AWAIT --&gt; TREE[&quot;插件树激活：llm/session/tools/agent-loop/…&lt;br/&gt;≈100 行 base 插件&quot;]
+    TREE --&gt; WS[&quot;web-startup 解析 --port (!!js 延迟求值)&quot;]
+    WS --&gt; WEB[&quot;webserver 127.0.0.1:3080&quot;]
+    WEB --&gt; FSS[&quot;frontend-static 服务 dist&lt;br/&gt;+ tapIndex 注入 __DSH_BOOT__&quot;]
+    WEB --&gt; UI[&quot;浏览器加载 AppWebEntry → Web UI&quot;]
+
+    style FLAT fill:#fff3cd,stroke:#d4a017
+    style INCLUDE fill:#d4edda,stroke:#28a745
+    style WEB fill:#cce5ff,stroke:#0d6efd
+</pre>
+<p><strong>关键点</strong>：
+- <strong>一次 <code>applyEntryPatches</code></strong> 保证 <code>--dump-config</code>、flag 推导与真实 boot <strong>同源不漂移</strong>；
+- patch 按 id <strong>整段替换 config</strong>（非深合并）、同 id 后写胜出；<code>insert</code> 行按引用推入结果树，故每代应用前必须 <code>structuredClone</code>；
+- <code>!!js</code> YAML 方言在<strong>该行声明的 injections 激活后</strong>才求值——所以 <code>webserver</code> 行能直接读 <code>ctx.webStartup.port</code>，flag 永远压过写死的默认值。</p>
+<hr>
+<h2>图 4（流程图）：工具执行五段式管线</h2>
+<p>一次 <code>tool/call</code> 从模型到结果的全部阶段与可插入点。</p>
+<pre class="mermaid" id="diagram-4">
+flowchart TD
+    TC[&quot;模型发出 tool/call&lt;br/&gt;(name + 原始 arguments JSON)&quot;] --&gt; S[&quot;写账本 tool/call&quot;]
+    S --&gt; P1[&quot;tools/pre-execute waterfall&lt;br/&gt;(可插入：审批/策略)&quot;]
+    P1 --&gt; DEC{决策}
+    DEC --&gt;|allow| G[&quot;guard 单调守卫&lt;br/&gt;(任一返回 reason 即拒绝)&quot;]
+    DEC --&gt;|ask| ASK[&quot;ctx.approval.request()&lt;br/&gt;→ UI 人工审批&quot;]
+    ASK --&gt;|allowed-once| G
+    ASK --&gt;|rejected/cancelled| DENY
+    DEC --&gt;|deny| DENY[&quot;materialize 结构化错误结果&quot;]
+    G --&gt;|通过| P2[&quot;tools/execute waterfall&lt;br/&gt;(可插入：timeout-policy / retry)&quot;]
+    P2 --&gt; BODY[&quot;工具本体 execute(args, exec)&lt;br/&gt;观察 exec.signal（协作取消）&quot;]
+    BODY --&gt;|value| P3[&quot;tools/post-execute waterfall&lt;br/&gt;(接受/替换内容/附加上下文/block)&quot;]
+    P3 --&gt; OUT[&quot;output.schema 校验 canonical 值&quot;]
+    OUT --&gt; R[&quot;写账本 tool/result&quot;]
+    R --&gt; N[&quot;tools/result emit&lt;br/&gt;(冻结结果通知 UI/遥测)&quot;]
+    N --&gt; NEXT[&quot;结果进入模型历史 → 下一 step 或收尾&quot;]
+
+    style P1 fill:#fff3cd,stroke:#d4a017
+    style P2 fill:#fff3cd,stroke:#d4a017
+    style P3 fill:#fff3cd,stroke:#d4a017
+</pre>
+<p><strong>关键点</strong>：
+- <code>tools/pre-execute</code>（决策）、<code>tools/execute</code>（around 包装）、<code>tools/post-execute</code>（结果改写）是<strong>三个 waterfall</strong>——监听者必须 <code>next()</code> 委托，否则短路；
+- 所有失败都归一化为结构化结果（<code>message + code</code>），模型可读可自纠（如 <code>UNKNOWN_TOOL</code>/<code>TOOL_TIMEOUT</code>/<code>FS_STALE_VERSION</code>）；
+- <code>timeout-policy</code> 通过临时替换 <code>exec.signal</code> 实现协作式超时；审批 <code>ask</code> 只在工具调用挂起期间等真人。</p>
+<hr>
+<h2>图 5（流程图）：会话日志 —— 一本账，四家读</h2>
+<p>事件溯源生态：所有下游都从同一本账派生，彼此不共享可变状态。</p>
+<pre class="mermaid" id="diagram-5">
+flowchart LR
+    APP[&quot;Session.append(event)&lt;br/&gt;冻结 → 入 log → 派发 session/event&quot;] --&gt; FAN[&quot;session/event 广播&quot;]
+    FAN --&gt; DERIVE[&quot;deriveMessages()&lt;br/&gt;surface 折叠 → LLM 历史&quot;]
+    FAN --&gt; PERS[&quot;Persistence write-behind&lt;br/&gt;200ms 批窗口 + flush 屏障&lt;br/&gt;→ JSONL/SQLite&quot;]
+    FAN --&gt; PROJ[&quot;Projection 投影单元&lt;br/&gt;eager 折叠 → stats/title/权限&quot;]
+    FAN --&gt; TELE[&quot;Telemetry 采样&lt;br/&gt;深拷贝 → 脱敏 → OTLP&quot;]
+    FAN --&gt; UI[&quot;前端渲染&lt;br/&gt;Session 事件窗口 → UI 组件&quot;]
+
+    DERIVE --&gt; REQ[&quot;模型请求（只读账本）&quot;]
+    PERS --&gt; RESTORE[&quot;崩溃恢复 load()&lt;br/&gt;截断 torn 尾 + 合成闭包&quot;]
+    PROJ --&gt; CACHE[&quot;投影缓存&lt;br/&gt;storage-domain 落盘&quot;]
+    TELE --&gt; EXPORT[&quot;OTLP/HTTP logs&quot;]
+    UI --&gt; VIEW[&quot;会话树/轨迹/工具卡片&quot;]
+
+    style APP fill:#d4edda,stroke:#28a745
+    style DERIVE fill:#cce5ff,stroke:#0d6efd
+    style PERS fill:#cce5ff,stroke:#0d6efd
+</pre>
+<p><strong>关键点</strong>：
+- 持久化、UI、遥测、投影<strong>互不阻塞</strong>——append 是同步入 log + fire-and-forget 通知；
+- 压缩（compaction）通过 <code>surfaceOp:{op:'replace',start,end}</code> <strong>盖纸条</strong>遮蔽旧节点而非删除，<code>sourceEventSeqs</code> 保留可恢复性；
+- SQLite 后端：每事件一行（<code>data</code> 为 JSON 原文），<code>SCHEMA_VERSION=15</code> + <code>application_id=0x44534850</code>，崩溃后 <code>load()</code> 找最后 <code>turn/end</code> 判撕裂点，自动补齐中断回合。</p>
+<hr>
+<h2>图 6（流程图）：能力接缝 —— 三脚插座的实例</h2>
+<p>以文件系统为例，展示 Definition / Provider / Consumer 如何让"换实现 = 换行为"。</p>
+<pre class="mermaid" id="diagram-6">
+flowchart TB
+    DEF[&quot;Service Definition&lt;br/&gt;fs/fs：抽象 FileSystem&lt;br/&gt;12 原语 + fs/* 事件词表&lt;br/&gt;ctx.fs&quot;]
+    DEF --&gt; P1[&quot;Provider：fs-local&lt;br/&gt;本地 realpath + 原子写&quot;]
+    DEF --&gt; P2[&quot;Provider：fs-sandbox&lt;br/&gt;继承 local + 策略围栏&quot;]
+    DEF --&gt; P3[&quot;Provider：e2b/fs-e2b&lt;br/&gt;云端沙箱 Filesystem API&quot;]
+    DEF --&gt; CON1[&quot;Consumer：tool-fs&lt;br/&gt;read/write/edit/read_image&quot;]
+    DEF --&gt; CON2[&quot;Consumer：str_replace_editor&quot;]
+    DEF --&gt; POL[&quot;纯事件策略&lt;br/&gt;fs-observation-policy&lt;br/&gt;(不注入服务，只听 fs/* 事件)&quot;]
+
+    P1 -.互斥替换.-&gt; DEF
+    P2 -.互斥替换.-&gt; DEF
+    P3 -.互斥替换.-&gt; DEF
+    POL -. read-before-write 门.-&gt; CON1
+
+    style DEF fill:#fff3cd,stroke:#d4a017
+    style P1 fill:#d4edda,stroke:#28a745
+    style P2 fill:#d4edda,stroke:#28a745
+    style P3 fill:#d4edda,stroke:#28a745
+</pre>
+<p><strong>关键点</strong>：
+- 一个 context 只允许一个 Provider 实现（装载第二个报重复服务）；
+- <code>fs-observation-policy</code> 不注册服务、只通过 <code>fs/write-intent</code>/<code>fs/edit-intent</code>/<code>fs/observed</code> 事件参与——卸载它只丢策略，工具仍可用裸 Provider（策略与能力正交组合）；
+- 换 Provider（本地→沙箱→E2B）时，<code>tool-fs</code>、<code>bash-local</code>、<code>terminal-bash</code>、<code>lsp-stdio</code> 全部零改动——这就是"一套执行世界"。</p>
+<hr>
+<p><em>图源：<code>packages/core/{agent-loop,agent,session,tools}</code>、<code>packages/fs/*</code>、<code>packages/boot/app-boot</code>、<code>packages/subagent/*</code> 源码精读。</em></p>
+    </article>
+  </div>
+  <div class="footer">DeepSeek Harness 源码精读 &copy; IoT-Pub</div>
+  <script src="/assets/mermaid-export.js"></script>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose', flowchart: { curve: 'basis' } });
+    await mermaid.run({ querySelector: '.mermaid' });
+    window.MermaidExport && window.MermaidExport.init({ backgroundColor: '#0d1117' });
+  </script>
+</body>
+</html>
