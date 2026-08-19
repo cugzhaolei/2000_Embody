@@ -30,39 +30,44 @@
 
 __version__ = "0.1.0"
 
-from .schemas import (
-    ModalityType,
-    SensorSchema,
-    DatasetSchema,
-    create_schema,
-)
-from .ego import (
-    EgoSegment,
-    EgoVideoSegmenter,
-    PhaseType,
-    PhaseSpan,
-    ActionPhaseRecognizer,
-    FilterVerdict,
-    AbnormalFilterResult,
-    EgoAbnormalFilter,
-    EgoTrainingSample,
-    EgoSampleGenerator,
-)
-from .annotation import LabelType, AnnotationResult, AutoLabeler
-from .tracking import (
-    JobStatus,
-    FailureStatus,
-    TrainingJob,
-    ModelVersion,
-    BenchmarkResult,
-    RealWorldEval,
-    FailureCase,
-    TrainingRegistry,
-)
-from .flywheel import (
-    FailureIngester,
-    CuratedPool,
-    FlywheelCurator,
-    DataFlywheel,
-    FlywheelReport,
-)
+# 目录名以数字开头不是合法 Python 包名，正常导入（conftest 别名 / smoke / web）
+# 使用 spec_from_file_location 以 "embodied_infra" 别名加载本文件，此时 __package__
+# 为 "embodied_infra"，相对导入可解析；pytest 若将本目录视为测试包根而直接按路径
+# 导入时 __package__ 为空，此时跳过顶层导出（模块级导入经由 embodied_infra 别名）。
+if __package__:
+    from .schemas import (
+        ModalityType,
+        SensorSchema,
+        DatasetSchema,
+        create_schema,
+    )
+    from .ego import (
+        EgoSegment,
+        EgoVideoSegmenter,
+        PhaseType,
+        PhaseSpan,
+        ActionPhaseRecognizer,
+        FilterVerdict,
+        AbnormalFilterResult,
+        EgoAbnormalFilter,
+        EgoTrainingSample,
+        EgoSampleGenerator,
+    )
+    from .annotation import LabelType, AnnotationResult, AutoLabeler
+    from .tracking import (
+        JobStatus,
+        FailureStatus,
+        TrainingJob,
+        ModelVersion,
+        BenchmarkResult,
+        RealWorldEval,
+        FailureCase,
+        TrainingRegistry,
+    )
+    from .flywheel import (
+        FailureIngester,
+        CuratedPool,
+        FlywheelCurator,
+        DataFlywheel,
+        FlywheelReport,
+    )

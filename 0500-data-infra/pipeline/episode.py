@@ -119,8 +119,8 @@ class EpisodeSegmenter:
                     start_idx=start,
                     end_idx=end,
                     start_time=float(timestamps[start]),
-                    end_time=float(timestamps[end]),
-                    duration=float(timestamps[end] - timestamps[start]),
+                    end_time=float(timestamps[end - 1]),  # end 是边界索引，可能 == len
+                    duration=float(timestamps[end - 1] - timestamps[start]),
                     num_steps=end - start,
                 )
                 segments.append(seg)
